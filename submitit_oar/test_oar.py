@@ -12,16 +12,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 import submitit
-
 from submitit import helpers
 from submitit.core import job_environment, submission, test_core, utils
 from submitit.core.core import Job
-from . import oar
+
+from .oar import OarInfoWatcher, OarJob, OarExecutor, OarJobEnvironment
 
 
-# pylint: disable=no-self-use, disable=duplicate-code
 class MockedSubprocess:
     """Helper for mocking subprocess calls"""
 
@@ -92,14 +90,16 @@ class MockedSubprocess:
             yield None
 
     @contextlib.contextmanager
-    def resubmit_job_context(self, job_id: str, resubmit_job_id: str) -> tp.Iterator[oar.OarJobEnvironment]:
+    def resubmit_job_context(
+        self, job_id: str, resubmit_job_id: str
+    ) -> tp.Iterator[OarJobEnvironment]:
         with utils.environment_variables(
             _USELESS_TEST_ENV_VAR_="1",
             SUBMITIT_EXECUTOR="oar",
             OAR_JOB_ID=str(job_id),
             OAR_ARRAY_ID=str(resubmit_job_id),
         ):
-            yield oar.OarJobEnvironment()
+            yield OarJobEnvironment()
 
 
 def _mock_log_files(job: Job[tp.Any], prints: str = "", errors: str = "") -> None:
@@ -114,18 +114,18 @@ def _mock_log_files(job: Job[tp.Any], prints: str = "", errors: str = "") -> Non
 def mocked_oar() -> tp.Iterator[MockedSubprocess]:
     mock = MockedSubprocess(known_cmds=["oarsub"])
     try:
-        with mock.context(), patch("submitit.oar.oar.OarJob._get_resubmitted_job") as resubmitted_job:
+        with mock.context(), patch("OarJob._get_resubmitted_job") as resubmitted_job:
             resubmitted_job.return_value = None
             yield mock
     finally:
         # Clear the state of the shared watcher
-        oar.OarJob.watcher.clear()
+        OarJob.watcher.clear()
 
 
 def test_mocked_missing_state(tmp_path: Path) -> None:
     with mocked_oar() as mock:
         mock.set_job_state("12", "")
-        job: oar.OarJob[None] = oar.OarJob(tmp_path, "12")
+        job: OarJob[None] = OarJob(tmp_path, "12")
         assert job.state == "UNKNOWN"
         job._interrupt(timeout=False)  # check_call is bypassed by MockedSubprocess
 
@@ -139,7 +139,7 @@ def test_job_environment() -> None:
 
 def test_oar_job_mocked(tmp_path: Path) -> None:
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         job = executor.submit(test_core.do_nothing, 1, 2, blublu=3)
         # First mock job always have id 12
         assert job.job_id == "12"
@@ -165,7 +165,7 @@ def test_oar_job_mocked(tmp_path: Path) -> None:
 def test_oar_job_array_mocked(use_batch_api: bool, tmp_path: Path) -> None:
     n = 5
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         data1, data2 = range(n), range(10, 10 + n)
 
         def add(x: int, y: int) -> int:
@@ -174,7 +174,7 @@ def test_oar_job_array_mocked(use_batch_api: bool, tmp_path: Path) -> None:
             return x + y
 
         jobs: tp.List[Job[int]] = []
-        with patch("submitit.oar.oar.OarExecutor._get_job_id_list_from_array_id") as mock_get_job_id_list:
+        with patch("OarExecutor._get_job_id_list_from_array_id") as mock_get_job_id_list:
             mock_get_job_id_list.return_value = ["12", "13", "14", "15", "16"]
 
             if use_batch_api:
@@ -201,11 +201,11 @@ def test_oar_job_array_mocked(use_batch_api: bool, tmp_path: Path) -> None:
 
 def test_get_job_id_list_from_array_id(tmp_path: Path) -> None:
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         job = executor.submit(test_core.do_nothing, 1, 2, error=12)
         with mock.job_context(job.job_id):
             oar_output_dict = {"12": {"state": "Running"}}
-            with patch("submitit.oar.oar.OarInfoWatcher.read_info") as mock_read_info:
+            with patch("OarInfoWatcher.read_info") as mock_read_info:
                 mock_read_info.return_value = oar_output_dict
             result = executor._get_job_id_list_from_array_id(array_id="12")
             assert result == ["12"]
@@ -213,7 +213,7 @@ def test_get_job_id_list_from_array_id(tmp_path: Path) -> None:
 
 def test_get_job_id_from_submission_command(tmp_path: Path) -> None:
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         job = executor.submit(test_core.do_nothing, 1, 2, error=12)
         with mock.job_context(job.job_id):
             oarsub_output = "OAR_JOB_ID=123456"
@@ -223,7 +223,7 @@ def test_get_job_id_from_submission_command(tmp_path: Path) -> None:
 
 def test_get_job_id_from_submission_command_failure(tmp_path: Path) -> None:
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         job = executor.submit(test_core.do_nothing, 1, 2, error=12)
         with mock.job_context(job.job_id):
             oarsub_output = "Invalid output\n"
@@ -233,7 +233,7 @@ def test_get_job_id_from_submission_command_failure(tmp_path: Path) -> None:
 
 def test_oar_error_mocked(tmp_path: Path) -> None:
     with mocked_oar() as mock:
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         executor.update_parameters(walltime="0:0:5", queue="default")  # just to cover the function
         job = executor.submit(test_core.do_nothing, 1, 2, error=12)
         with mock.job_context(job.job_id):
@@ -249,7 +249,7 @@ def test_oar_error_mocked(tmp_path: Path) -> None:
 @contextlib.contextmanager
 def mock_requeue(called_with: tp.Optional[int] = None, not_called: bool = False):
     assert not_called or called_with is not None
-    requeue = patch("submitit.oar.oar.OarJobEnvironment._requeue", return_value=None)
+    requeue = patch("OarJobEnvironment._requeue", return_value=None)
     with requeue as _patch:
         try:
             yield
@@ -261,7 +261,7 @@ def mock_requeue(called_with: tp.Optional[int] = None, not_called: bool = False)
 
 
 def get_signal_handler(job: Job) -> job_environment.SignalHandler:
-    env = oar.OarJobEnvironment()
+    env = OarJobEnvironment()
     delayed = utils.DelayedSubmission.load(job.paths.submitted_pickle)
     sig = job_environment.SignalHandler(env, job.paths, delayed)
     return sig
@@ -275,7 +275,7 @@ def test_requeuing_checkpointable(tmp_path: Path, fast_forward_clock) -> None:
 
     # Start job with a 60 minutes timeout
     with mocked_oar():
-        executor = oar.OarExecutor(folder=tmp_path, max_num_timeout=1)
+        executor = OarExecutor(folder=tmp_path, max_num_timeout=1)
         executor.update_parameters(walltime="1:0:0")
         job = executor.submit(fs0)
     # If the function is checkpointed, the OAR Job type should be set to idempotent,
@@ -323,7 +323,7 @@ def test_requeuing_checkpointable(tmp_path: Path, fast_forward_clock) -> None:
     fast_forward_clock(minutes=55)
 
     # The job has already timed out twice, we should stop here.
-    usr_sig = oar.OarJobEnvironment._usr_sig()
+    usr_sig = OarJobEnvironment._usr_sig()
     with mock_requeue(not_called=True), pytest.raises(
         utils.UncompletedJobError, match="timed-out too many times."
     ):
@@ -336,7 +336,7 @@ def test_requeuing_not_checkpointable(tmp_path: Path, fast_forward_clock) -> Non
     usr_sig = submitit.JobEnvironment._usr_sig()
     # Start job with a 60 minutes timeout
     with mocked_oar():
-        executor = oar.OarExecutor(folder=tmp_path, max_num_timeout=1)
+        executor = OarExecutor(folder=tmp_path, max_num_timeout=1)
         executor.update_parameters(walltime="1:0:0")
         job = executor.submit(test_core._three_time, 10)
     # If the function is not checkpointed, the OAR Job type should not be set to idempotent
@@ -369,7 +369,7 @@ def test_requeuing_not_checkpointable(tmp_path: Path, fast_forward_clock) -> Non
 def test_checkpoint_and_exit(tmp_path: Path) -> None:
     usr_sig = submitit.JobEnvironment._usr_sig()
     with mocked_oar():
-        executor = oar.OarExecutor(folder=tmp_path, max_num_timeout=1)
+        executor = OarExecutor(folder=tmp_path, max_num_timeout=1)
         executor.update_parameters(walltime="1:0:0")
         job = executor.submit(test_core._three_time, 10)
 
@@ -387,7 +387,7 @@ def test_need_checkpointable_executor(tmp_path: Path) -> None:
         fs0 = helpers.FunctionSequence()
         fs0.add(test_core._three_time, 10)
 
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
         delayed = utils.DelayedSubmission(fs0)
 
         assert isinstance(fs0, helpers.Checkpointable)
@@ -396,7 +396,7 @@ def test_need_checkpointable_executor(tmp_path: Path) -> None:
 
 def test_num_tasks(tmp_path: Path) -> None:
     with mocked_oar():
-        executor = oar.OarExecutor(folder=tmp_path, max_num_timeout=1)
+        executor = OarExecutor(folder=tmp_path, max_num_timeout=1)
         executor.update_parameters(walltime="1:0:0")
         job = executor.submit(test_core._three_time, 10)
 
@@ -419,10 +419,10 @@ def test_stderr_to_stdout(tmp_path: Path) -> None:
 
 
 def test_as_oar_flag(tmp_path: Path) -> None:
-    assert oar._as_oar_flag("queue", "production") == "#OAR --queue production"
-    assert oar._as_oar_flag("n", "submitit") == "#OAR -n submitit"
+    assert submitit_oar.oar._as_oar_flag("queue", "production") == "#OAR --queue production"
+    assert submitit_oar.oar._as_oar_flag("n", "submitit") == "#OAR -n submitit"
     with mocked_oar():
-        executor = submitit.AutoExecutor(folder=tmp_path)
+        executor = submitit.AutoExecutor(folder=tmp_path, cluster="oar")
         executor.update_parameters(oar_additional_parameters=dict({"queue": "production", "n": "submitit"}))
         job = executor.submit(test_core.do_nothing, 1, 2, blublu=3)
     text = job.paths.submission_file.read_text()
@@ -433,7 +433,7 @@ def test_as_oar_flag(tmp_path: Path) -> None:
 
 
 def test_make_oarsub_string() -> None:
-    string = oar._make_oarsub_string(
+    string = submitit_oar.oar._make_oarsub_string(
         command="blublu bar",
         folder="/tmp",
         queue="default",
@@ -463,46 +463,46 @@ def test_make_oarsub_string() -> None:
 
 
 def test_make_oarsub_string_gpu() -> None:
-    string = oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2)
+    string = submitit_oar.oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2)
     assert "-l /gpu=2" in string
 
 
 def test_make_oarsub_string_core() -> None:
-    string = oar._make_oarsub_string(command="blublu", folder="/tmp", cores=2)
+    string = submitit_oar.oar._make_oarsub_string(command="blublu", folder="/tmp", cores=2)
     assert "-l /core=2" in string
 
 
 def test_make_oarsub_string_gpu_and_nodes() -> None:
-    string = oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2, nodes=1)
+    string = submitit_oar.oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2, nodes=1)
     assert "-l /nodes=1/gpu=2" in string
 
 
 def test_make_oarsub_string_cores_and_nodes() -> None:
-    string = oar._make_oarsub_string(command="blublu", folder="/tmp", cores=2, nodes=1)
+    string = submitit_oar.oar._make_oarsub_string(command="blublu", folder="/tmp", cores=2, nodes=1)
     assert "-l /nodes=1/core=2" in string
 
 
 def test_make_oarsub_string_cores_gpu_and_nodes() -> None:
-    string = oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2, nodes=1, cores=4)
+    string = submitit_oar.oar._make_oarsub_string(command="blublu", folder="/tmp", gpu=2, nodes=1, cores=4)
     assert "-l /nodes=1/gpu=2/core=4" in string
 
 
 def test_update_parameters(tmp_path: Path) -> None:
     with mocked_oar():
-        executor = submitit.AutoExecutor(folder=tmp_path)
+        executor = submitit.AutoExecutor(folder=tmp_path, cluster="oar")
     executor.update_parameters(oar_walltime="2:0:0")
     assert executor._executor.parameters["walltime"] == "2:0:0"
 
 
 def test_update_parameters_error(tmp_path: Path) -> None:
     with mocked_oar():
-        executor = oar.OarExecutor(folder=tmp_path)
+        executor = OarExecutor(folder=tmp_path)
     with pytest.raises(ValueError):
         executor.update_parameters(blublu=12)
 
 
 def test_make_command() -> None:
-    watcher = oar.OarInfoWatcher()
+    watcher = OarInfoWatcher()
     watcher._registered = {"1", "2", "3"}
     watcher._finished = {"2", "4"}
     result = watcher._make_command()
@@ -515,26 +515,26 @@ def test_read_info() -> None:
             "state" : "Running"
         }
     }"""
-    output = oar.OarInfoWatcher().read_info(example)
+    output = OarInfoWatcher().read_info(example)
     assert output["1924697"] == {"JobID": "1924697", "NodeList": None, "State": "RUNNING"}
 
 
 def test_read_info_empty() -> None:
     example = ""
-    output = oar.OarInfoWatcher().read_info(example)
+    output = OarInfoWatcher().read_info(example)
     assert not output
 
 
 def test_get_state() -> None:
     with mocked_oar() as mock:
         mock.set_job_state("12", "Running")
-        state = oar.OarInfoWatcher().get_state(job_id="12")
+        state = OarInfoWatcher().get_state(job_id="12")
         assert state == "RUNNING"
 
 
 def test_watcher() -> None:
     with mocked_oar() as mock:
-        watcher = oar.OarInfoWatcher()
+        watcher = OarInfoWatcher()
         mock.set_job_state("12", "Running")
         assert watcher.num_calls == 0
         state = watcher.get_state(job_id="11")
@@ -551,21 +551,21 @@ def test_watcher() -> None:
 
 
 def test_get_default_parameters() -> None:
-    defaults = oar._get_default_parameters()
+    defaults = submitit_oar.oar._get_default_parameters()
     assert defaults["n"] == "submitit"
 
 
 def test_name() -> None:
-    assert oar.OarExecutor.name() == "oar"
+    assert OarExecutor.name() == "oar"
 
 
 @contextlib.contextmanager
-def with_oar_nodefile(node_list: str) -> tp.Iterator[oar.OarJobEnvironment]:
+def with_oar_nodefile(node_list: str) -> tp.Iterator[OarJobEnvironment]:
     node_file_path = Path(__file__).parent / "_oar_node_file.txt"
     _mock_oar_node_file(node_file_path, node_list)
     os.environ["OAR_JOB_ID"] = "1"
     os.environ["OAR_NODEFILE"] = str(Path.joinpath(node_file_path))
-    yield oar.OarJobEnvironment()
+    yield OarJobEnvironment()
     del os.environ["OAR_NODEFILE"]
     del os.environ["OAR_JOB_ID"]
 
@@ -607,11 +607,11 @@ def test_node() -> None:
 @contextlib.contextmanager
 def with_oar_environment(
     raw_job_id: str, array_job_id: str, array_task_id: str
-) -> tp.Iterator[oar.OarJobEnvironment]:
+) -> tp.Iterator[OarJobEnvironment]:
     os.environ["OAR_JOB_ID"] = raw_job_id
     os.environ["OAR_ARRAY_ID"] = array_job_id
     os.environ["OAR_ARRAY_INDEX"] = array_task_id
-    yield oar.OarJobEnvironment()
+    yield OarJobEnvironment()
     del os.environ["OAR_ARRAY_INDEX"]
     del os.environ["OAR_ARRAY_ID"]
     del os.environ["OAR_JOB_ID"]
@@ -626,7 +626,7 @@ def test_paths() -> None:
 @pytest.mark.parametrize("params", [{}, {"timeout_min": None}])  # type: ignore
 def test_oar_through_auto(params: tp.Dict[str, int], tmp_path: Path) -> None:
     with mocked_oar():
-        executor = submitit.AutoExecutor(folder=tmp_path)
+        executor = submitit.AutoExecutor(folder=tmp_path, cluster="oar")
         executor.update_parameters(**params, oar_additional_parameters={"t": "besteffort"})
         job = executor.submit(test_core.do_nothing, 1, 2, blublu=3)
     text = job.paths.submission_file.read_text()
@@ -635,9 +635,9 @@ def test_oar_through_auto(params: tp.Dict[str, int], tmp_path: Path) -> None:
 
 
 def test_timeout_min_to_oar_walltime(tmp_path: Path) -> None:
-    assert oar._timeout_min_to_oar_walltime(90) == "01:30"
+    assert submitit_oar.oar._timeout_min_to_oar_walltime(90) == "01:30"
     with mocked_oar():
-        executor = submitit.AutoExecutor(folder=tmp_path)
+        executor = submitit.AutoExecutor(folder=tmp_path, cluster="oar")
         executor.update_parameters(timeout_min=90)
         job = executor.submit(test_core.do_nothing, 1, 2, blublu=3)
     text = job.paths.submission_file.read_text()
@@ -646,12 +646,12 @@ def test_timeout_min_to_oar_walltime(tmp_path: Path) -> None:
 
 
 def test_oar_walltime_to_timeout_min() -> None:
-    assert oar._oar_walltime_to_timeout_min("1:30:00") == 90
+    assert submitit_oar.oar._oar_walltime_to_timeout_min("1:30:00") == 90
 
 
 def test_oar_walltime_wins_over_timeout_min(tmp_path: Path) -> None:
     with mocked_oar():
-        executor = submitit.AutoExecutor(folder=tmp_path)
+        executor = submitit.AutoExecutor(folder=tmp_path, cluster="oar")
         executor.update_parameters(timeout_min=90, oar_walltime="2:0:0")
         job = executor.submit(test_core.do_nothing, 1, 2, blublu=3)
     text = job.paths.submission_file.read_text()

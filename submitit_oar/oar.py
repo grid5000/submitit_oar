@@ -234,7 +234,9 @@ class OarExecutor(core.PicklingExecutor):
     job_class = OarJob
     watcher = OarInfoWatcher(delay_s=600)
 
-    def __init__(self, folder: tp.Union[Path, str], max_num_timeout: int = 3, python: str = None) -> None:
+    def __init__(
+        self, folder: tp.Union[Path, str], max_num_timeout: int = 3, python: tp.Optional[str] = None
+    ) -> None:
         super().__init__(folder, max_num_timeout=max_num_timeout)
         self.python = python
         if not self.affinity() > 0:
