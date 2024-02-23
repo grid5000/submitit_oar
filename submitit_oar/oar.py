@@ -20,9 +20,7 @@ from submitit import helpers
 from submitit.core import core, job_environment, logger, utils
 
 
-# pylint: disable=duplicate-code
 class OarInfoWatcher(core.InfoWatcher):
-
     submitit_state_mapping = {
         "Suspended": "SUSPENDED",
         "Hold": "PENDING",
@@ -81,7 +79,6 @@ class OarInfoWatcher(core.InfoWatcher):
 
 
 class OarJob(core.Job[core.R]):
-
     _cancel_command = "oardel"
     watcher = OarInfoWatcher(delay_s=600)
 
@@ -546,7 +543,6 @@ def _oar_walltime_to_timeout_min(walltime: str) -> int:
 
 
 class OarJobEnvironment(job_environment.JobEnvironment):
-
     _env = {
         "job_id": "OAR_JOB_ID",
         "array_job_id": "OAR_ARRAY_ID",
