@@ -2,7 +2,8 @@ from setuptools import setup
 
 setup(
     name="submitit_oar",
-    install_requires=["submitit>=1.4.6"],
+    version="1.0.0",
+    install_requires=["submitit==1.5.1"],
     entry_points={
         "submitit": "\n".join(
             [

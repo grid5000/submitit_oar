@@ -7,7 +7,7 @@ create-venv:
   stage: build
   tags:
     - grid5000-docker
-  image: python:3.6
+  image: python:3.8
   script:
     - apt-get update -qy
     - apt-get install -y make
@@ -21,7 +21,7 @@ installable:
   stage: build
   tags:
     - grid5000-docker
-  image: python:3.6
+  image: python:3.8
   script:
     - make installable
 
@@ -29,7 +29,7 @@ check-format:
     stage: test
     tags:
       - grid5000-docker
-    image: python:3.6
+    image: python:3.8
     script:
         - source venv/bin/activate
         - echo $VIRTUAL_ENV
@@ -39,7 +39,7 @@ lint:
   stage: test
   tags:
     - grid5000-docker
-  image: python:3.6
+  image: python:3.8
   script:
     - source venv/bin/activate
     - make lint
@@ -51,7 +51,7 @@ test_coverage:
   stage: test
   tags:
     - grid5000-docker
-  image: python:3.6
+  image: python:3.8
   script:
     - apt-get update -qy
     - apt-get install -y rsync
