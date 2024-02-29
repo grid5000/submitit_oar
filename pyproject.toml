@@ -23,6 +23,10 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.entry-points.submitit]
+executor = "submitit_oar.oar:OarExecutor"
+job_environment = "submitit_oar.oar:OarJobEnvironment"
+
 [project.urls]
   Source = "https://github.com/ychiat35/submitit_oar.git"
   Tracker = "https://github.com/ychiat35/submitit_oar.git/issues"
