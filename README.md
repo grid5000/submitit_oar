@@ -5,7 +5,7 @@ submitit_oar is an [Oar](https://oar.imag.fr/) plugin for [Submitit](https://git
 Quick install, in a virtualenv/conda environment where `pip` is installed (check `which pip`):
 - latest release:
 ```
-pip install submitit_oar==1.0.0
+pip install submitit_oar==1.1.0
 ```
 - from source:
 ```
