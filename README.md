@@ -32,3 +32,8 @@ assert output == 12
 ```
 
 You can try running this above example with a breakpoint at https://github.com/facebookincubator/submitit/blob/main/submitit/core/plugins.py#L33, to be sure that Submitit correctly finds the submitit_oar plugin.
+
+# Releasing submitit_oar
+
+Create a tag matching the version to release in gitlab, it should create a pipeline which will push the package to PyPi.
+If you want to do this manually, populate the `FLIT_PASSWORD` environment variable with the API token, and run `make release`

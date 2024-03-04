@@ -95,16 +95,17 @@ integration: clean_cache venv check_format lint installable test_coverage
 	# clean_cache will make sure we download the last versions of linters.
 	# Use `make -k integration` to run all checks even if previous fails.
 
-release: integration
+release: clean_cache venv installable
 	echo "Releasing submitit_oar $(CURRENT_VERSION)"
 	[ ! -d dist ] || rm -r dist
 	# Make sure the repo is in a clean state
 	git diff --exit-code
+	# Make sure we're creating a release for a tag which matches the version.
+	[ "`git describe --tag --exact-match $(git rev-parse HEAD)`" = "$(CURRENT_VERSION)" ] && echo "Found a tag matching current version"
+	# FLIT_PASSWORD is set by gitlab's variable environments.
+	[ -n "$(FLIT_PASSWORD)" ] || (echo "FLIT_PASSWORD not set, fix gitlab's variables, or provide it" && exit 1)
 	# --setup-py generates a setup.py file to allow user with old
 	# versions of pip to install it without flit.
-	git tag $(CURRENT_VERSION)
 	# To have a reproducible build we use the timestamp of the last commit:
 	# https://flit.pypa.io/en/latest/reproducible.html
-	SOURCE_DATE_EPOCH=`git log -n1 --format=%cd --date=unix` $(BIN)python -m flit publish --setup-py
-	git checkout HEAD -- README.md
-	git push origin $(CURRENT_VERSION)
+	FLIT_USERNAME="__token__" SOURCE_DATE_EPOCH=`git log -n1 --format=%cd --date=unix` $(BIN)python -m flit publish --setup-py
