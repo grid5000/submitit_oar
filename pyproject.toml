@@ -19,7 +19,7 @@ classifiers=[
 dependencies = [
   "cloudpickle>=1.2.1",
   "typing_extensions>=3.7.4.2",
-  "submitit==1.5.1"
+  "submitit==1.5.4"
 ]
 dynamic = ["version"]
 
