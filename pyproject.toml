@@ -19,7 +19,7 @@ classifiers=[
 dependencies = [
   "cloudpickle>=1.2.1",
   "typing_extensions>=3.7.4.2",
-  "submitit==1.5.1"
+  "submitit==1.5.4"
 ]
 dynamic = ["version"]
 
@@ -44,7 +44,6 @@ job_environment = "submitit_oar.oar:OarJobEnvironment"
         "pre-commit>=1.15.2",
         # Linters
         "mypy>=1.4.1",
-        "types-pkg_resources>=0.1.2",
         "pylint>=3.0.0",
         # Release
         "flit>=3.5.1"
