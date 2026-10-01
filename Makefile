@@ -68,7 +68,7 @@ TEST_PYPI=--index-url 'https://test.pypi.org/simple/' --no-cache-dir --no-deps -
 installable_wheel:
 	[ ! -d dist ] || rm -r dist
 	grep -e '__version__' ./submitit_oar/__init__.py | sed 's/__version__ = //' | sed 's/"//g'
-	$(BIN)python -m flit build --setup-py
+	$(BIN)python -m flit build
 	git checkout HEAD -- ./submitit_oar/__init__.py
 
 	[ ! -d $(USER_VENV) ] || rm -r $(USER_VENV)
@@ -104,8 +104,6 @@ release: clean_cache venv installable
 	[ "`git describe --tag --exact-match $(git rev-parse HEAD)`" = "$(CURRENT_VERSION)" ] && echo "Found a tag matching current version"
 	# FLIT_PASSWORD is set by gitlab's variable environments.
 	[ -n "$(FLIT_PASSWORD)" ] || (echo "FLIT_PASSWORD not set, fix gitlab's variables, or provide it" && exit 1)
-	# --setup-py generates a setup.py file to allow user with old
-	# versions of pip to install it without flit.
 	# To have a reproducible build we use the timestamp of the last commit:
 	# https://flit.pypa.io/en/latest/reproducible.html
-	FLIT_USERNAME="__token__" SOURCE_DATE_EPOCH=`git log -n1 --format=%cd --date=unix` $(BIN)python -m flit publish --setup-py
+	FLIT_USERNAME="__token__" SOURCE_DATE_EPOCH=`git log -n1 --format=%cd --date=unix` $(BIN)python -m flit publish
