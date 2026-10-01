@@ -430,7 +430,7 @@ def _get_default_parameters() -> tp.Dict[str, tp.Any]:
     return {key: val for key, val in zipped if key not in {"command", "folder", "map_count"}}
 
 
-# pylint: disable=too-many-arguments,unused-argument, too-many-locals
+# pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument,too-many-locals
 def _make_oarsub_string(
     command: str,
     folder: tp.Union[str, Path],
