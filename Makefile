@@ -51,7 +51,7 @@ lint: mypy pylint
 venv: venv/pyproject.toml
 
 venv/pyproject.toml: pyproject.toml
-	python3 -m venv venv
+	python -m venv venv
 	venv/bin/pip install --progress-bar off --upgrade pip
 	venv/bin/pip install --progress-bar off -U -e .[dev]
 	cp $^ $@
@@ -72,7 +72,7 @@ installable_wheel:
 	git checkout HEAD -- ./submitit_oar/__init__.py
 
 	[ ! -d $(USER_VENV) ] || rm -r $(USER_VENV)
-	python3 -m venv $(USER_VENV)
+	python -m venv $(USER_VENV)
 	$(USER_VENV)/bin/pip install --progress-bar off dist/submitit_oar-*any.whl
 	# Check that importing works
 	$(USER_VENV)/bin/python -c "import submitit_oar"
